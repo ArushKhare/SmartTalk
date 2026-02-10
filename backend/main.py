@@ -11,7 +11,6 @@ import threading
 import multiprocessing
 from pathlib import Path
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -289,24 +288,22 @@ def fill_pool_parallel():
     start_time = time.time()
     generated = 0
 
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = {executor.submit(generate_one_problem, diff): diff for diff in tasks}
+    for i, diff in enumerate(tasks):
+        try:
+            if i > 0:
+                time.sleep(2)  # 2s delay between API calls to avoid rate limiting
+            problem = generate_one_problem(diff)
 
-        for future in as_completed(futures):
-            diff = futures[future]
-            try:
-                problem = future.result()
+            if problem:
+                problem["generated_at"] = datetime.now().isoformat()
+                if atomic_add_problem(diff, problem):
+                    generated += 1
+                    with file_lock:
+                        count = len(load_problem_pool().get(diff, []))
+                    print(f"{diff}: {count}/{TARGET_PER_DIFFICULTY}")
 
-                if problem:
-                    problem["generated_at"] = datetime.now().isoformat()
-                    if atomic_add_problem(diff, problem):
-                        generated += 1
-                        with file_lock:
-                            count = len(load_problem_pool().get(diff, []))
-                        print(f"{diff}: {count}/{TARGET_PER_DIFFICULTY}")
-
-            except Exception as e:
-                print(f"{diff} failed: {e}")
+        except Exception as e:
+            print(f"{diff} failed: {e}")
 
     elapsed = time.time() - start_time
     print(f"Batch complete: {generated} problems in {elapsed:.1f}s")
@@ -332,18 +329,18 @@ def background_generator():
 
         batch = tasks[:8]
 
-        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            futures = {executor.submit(generate_one_problem, d): d for d in batch}
-
-            for future in as_completed(futures):
-                diff = futures[future]
-                try:
-                    problem = future.result()
-                    if problem:
-                        problem["generated_at"] = datetime.now().isoformat()
-                        atomic_add_problem(diff, problem)
-                except Exception as e:
-                    print(f"Background gen {diff} failed: {e}")
+        for i, diff in enumerate(batch):
+            if not generator_running:
+                break
+            try:
+                if i > 0:
+                    time.sleep(2)  # 2s delay between API calls to avoid rate limiting
+                problem = generate_one_problem(diff)
+                if problem:
+                    problem["generated_at"] = datetime.now().isoformat()
+                    atomic_add_problem(diff, problem)
+            except Exception as e:
+                print(f"Background gen {diff} failed: {e}")
 
         time.sleep(3)
 
