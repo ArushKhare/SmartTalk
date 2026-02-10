@@ -34,9 +34,11 @@ CODE_EXECUTION_TIMEOUT = 5  # seconds
 # ---------- FastAPI App ----------
 app = FastAPI(title="SmartTalk API")
 
+ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "*").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
