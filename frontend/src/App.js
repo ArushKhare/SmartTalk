@@ -350,6 +350,13 @@ function App() {
     return () => clearInterval(interval);
   }, [fetchPoolStatus]);
 
+  // Auto-start quiz when pool is ready
+  useEffect(() => {
+    if (poolStatus?.ready && !quizStarted && !loading) {
+      startQuiz();
+    }
+  }, [poolStatus?.ready]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const startQuiz = async () => {
     setLoading(true);
     try {
